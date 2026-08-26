@@ -11,7 +11,7 @@ import ExcelJS from "exceljs";
 
 
 export const createcategory = async (req: Request, res: Response) => {
-  const { name, ar_name, image, parentId , Is_Online } = req.body;
+  const { name, ar_name, image, parentId , Is_Online, order } = req.body;
   
   if (!name) throw new BadRequest("Category name is required");
   
@@ -29,6 +29,7 @@ export const createcategory = async (req: Request, res: Response) => {
     image: imageUrl,
     parentId: parentId && parentId !== "" ? parentId : undefined,  // 👈 لو فاضي يبقى undefined
     Is_Online: Is_Online || true,
+    order
   });
   
   SuccessResponse(res, { message: "Category created successfully", category });
@@ -52,7 +53,7 @@ export const getCategories = async (req: Request, res: Response) => {
     })
   );
   
-  const ParentCategories = categoriesWithCorrectCount.filter(cat => !cat.parentId);
+  const ParentCategories = categoriesWithCorrectCount;
   
   SuccessResponse(res, { 
     message: "get categories successfully", 
@@ -104,11 +105,12 @@ export const updateCategory = async (req: Request, res: Response) => {
   const category = await CategoryModel.findById(id);
   if (!category) throw new NotFound("Category not found");
 
-  const { name, ar_name, parentId, image , Is_Online } = req.body;
+  const { name, ar_name, parentId, image , Is_Online, order } = req.body;
 
   if (name !== undefined) category.name = name;
   if (ar_name !== undefined) category.ar_name = ar_name;
   if (Is_Online !== undefined) category.Is_Online = Is_Online;
+  if (order !== undefined) category.order = order;
   
   if (parentId !== undefined) {
     category.parentId = parentId && parentId !== "" ? parentId : undefined;
@@ -170,6 +172,7 @@ export const importCategoriesFromExcel = async (req: Request, res: Response) => 
     ar_name: findColumn(["ar_name", "arabic name", "الاسم بالعربي"]),
     parent: findColumn(["parent", "parent category", "القسم الرئيسي"]),
     image: findColumn(["image", "photo", "الصورة"]),
+    order: findColumn(["order", "ترتيب"]),
   };
 
   const categories: Array<{
@@ -177,6 +180,7 @@ export const importCategoriesFromExcel = async (req: Request, res: Response) => 
     ar_name: string;
     parent: string;
     image: string;
+    order: number;
   }> = [];
 
   worksheet.eachRow((row, rowNumber) => {
@@ -191,9 +195,10 @@ export const importCategoriesFromExcel = async (req: Request, res: Response) => 
     const ar_name = cols.ar_name !== -1 ? getValue(cols.ar_name) : row.getCell(2).value?.toString().trim() || "";
     const parent = cols.parent !== -1 ? getValue(cols.parent) : row.getCell(3).value?.toString().trim() || "";
     const image = cols.image !== -1 ? getValue(cols.image) : row.getCell(4).value?.toString().trim() || "";
+    const order = cols.order !== -1 ? parseInt(getValue(cols.order)) : 999;
 
     if (name) {
-      categories.push({ name, ar_name: ar_name || name, parent, image });
+      categories.push({ name, ar_name: ar_name || name, parent, image, order });
     }
   });
 
@@ -251,6 +256,7 @@ export const importCategoriesFromExcel = async (req: Request, res: Response) => 
         ar_name: cat.ar_name,
         parentId: parentId || null,
         image: cat.image || "",
+        order: cat.order,
       });
 
       categoryMap[cat.name.toLowerCase()] = newCategory._id.toString();
