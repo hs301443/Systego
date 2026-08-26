@@ -668,16 +668,20 @@ export const getAllReturns = async (req: Request, res: Response) => {
   if (startDate || endDate) {
     query.date = {};
     if (startDate) {
-      query.date.$gte = new Date(startDate as string);
+      const start = new Date(startDate as string);
+      start.setHours(0, 0, 0, 0);
+      query.date.$gte = start;
     }
     if (endDate) {
-      query.date.$lte = new Date(endDate as string);
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      query.date.$lte = end;
     }
   }
 
   const skip = (Number(page) - 1) * Number(limit);
 
-const returns = await ReturnModel.find(query)
+  const returns = await ReturnModel.find(query)
     .populate("sale_id", "reference grand_total date")
     .populate("customer_id", "name phone_number email")
     .populate("warehouse_id", "name")
@@ -698,6 +702,14 @@ const returns = await ReturnModel.find(query)
     .limit(Number(limit))
     .lean();
 
+  const returnsWithAccountNames = returns.map((ret: any) => ({
+    ...ret,
+    financials: (ret.financials || []).map((f: any) => ({
+      ...f,
+      account_name: f.account_id?.name || f.account_id?.ar_name || null,
+    })),
+  }));
+
   const total = await ReturnModel.countDocuments(query);
 
   const totalAmount = await ReturnModel.aggregate([
@@ -707,7 +719,7 @@ const returns = await ReturnModel.find(query)
 
   return SuccessResponse(res, {
     message: "Returns fetched successfully",
-    returns: returns,
+    returns: returnsWithAccountNames,
     pagination: {
       page: Number(page),
       limit: Number(limit),

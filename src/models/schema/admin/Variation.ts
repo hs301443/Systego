@@ -45,4 +45,14 @@ VariationSchema.set("toJSON", { virtuals: true });
 
 export const VariationModel: Model<IVariation> = mongoose.model<IVariation>("Variation", VariationSchema);
 
+OptionSchema.virtual("variation", {
+  ref: "Variation",
+  localField: "variationId",
+  foreignField: "_id",
+  justOne: true
+});
+
+OptionSchema.set("toObject", { virtuals: true });
+OptionSchema.set("toJSON", { virtuals: true });
+
 export const OptionModel: Model<IOption> = mongoose.model<IOption>("Option", OptionSchema);

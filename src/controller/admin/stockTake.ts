@@ -11,6 +11,7 @@ import { AnyBulkWriteOperation } from "mongoose";
 import { ProductPriceModel, ProductPriceOptionModel } from "../../models/schema/admin/product_price";
 import { VariationModel } from "../../models/schema/admin/Variation";
 import { ProductModel } from "../../models/schema/admin/products";
+import { WastedModel } from "../../models/schema/admin/wasted";
 
 export const createStocktake = async (req: Request, res: Response) => {
   const { warehouseId, type, mode, productIds } = req.body;
@@ -341,15 +342,17 @@ export const bulkUpdateStocktakeItems = async (req: Request, res: Response) => {
 
 export const exportStocktakeSheet = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { includeSystemQty = "true" } = req.query;
+  const { includeSystemQty = "true", includeDifference = "false" } = req.query;
 
   const showSystemQty = includeSystemQty === "true";
+  const showDifference = includeDifference === "true";
 
-  const stocktake = await StocktakeModel.findById(id).populate(
-    "warehouseId",
-    "name"
-  );
+  const stocktake = await StocktakeModel.findById(id).populate("warehouseId", "name");
   if (!stocktake) throw new NotFound("Stocktake not found");
+
+  if (showDifference && stocktake.status !== "completed") {
+    throw new BadRequest("Difference can only be exported for a completed stocktake");
+  }
 
   const items = await StocktakeItemModel.find({ stocktakeId: id })
     .sort({ productNameSnapshot: 1 })
@@ -360,9 +363,7 @@ export const exportStocktakeSheet = async (req: Request, res: Response) => {
 
   const productPriceIds = [
     ...new Set(
-      items
-        .filter((i: any) => i.productPriceId)
-        .map((i: any) => i.productPriceId.toString())
+      items.filter((i: any) => i.productPriceId).map((i: any) => i.productPriceId.toString())
     ),
   ];
 
@@ -394,8 +395,7 @@ export const exportStocktakeSheet = async (req: Request, res: Response) => {
         );
 
         if (variation) {
-          if (!groupedOptions[variation.name])
-            groupedOptions[variation.name] = [];
+          if (!groupedOptions[variation.name]) groupedOptions[variation.name] = [];
           groupedOptions[variation.name].push(option);
         }
       }
@@ -413,12 +413,19 @@ export const exportStocktakeSheet = async (req: Request, res: Response) => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Stocktake");
 
-  worksheet.columns = [
-    { header: "ID", key: "itemId", width: 26 , hidden:true},
+  const columns: any[] = [
+    { header: "ID", key: "itemId", width: 26, hidden: true },
     { header: "Product", key: "product", width: 40 },
     { header: "System Qty", key: "systemQty", width: 14 },
     { header: "Actual Qty", key: "actualQty", width: 14 },
   ];
+
+  if (showDifference) {
+    columns.push({ header: "Difference", key: "difference", width: 14 });
+    columns.push({ header: "Status", key: "resolutionType", width: 14 });
+  }
+
+  worksheet.columns = columns;
 
   items.forEach((item: any) => {
     const variationLabel = item.productPriceId
@@ -430,43 +437,48 @@ export const exportStocktakeSheet = async (req: Request, res: Response) => {
         ? `${item.productNameSnapshot} - ${variationLabel}`
         : item.productNameSnapshot;
 
-    worksheet.addRow({
+    const row: any = {
       itemId: item._id.toString(),
       product: productDisplayName,
       systemQty: showSystemQty ? item.systemQty : "",
       actualQty: item.actualQty ?? "",
-    });
+    };
+
+    if (showDifference) {
+      row.difference = item.difference ?? "";
+      row.resolutionType = item.resolutionType || (item.resolutionStatus === "skipped" ? "skipped" : "");
+    }
+
+    worksheet.addRow(row);
   });
 
-  // lock every cell except Actual Qty (col 4)
+  // when exporting a diff report, nothing is meant to be edited/re-imported - lock everything
+  // when exporting a blank fill-in sheet, keep Actual Qty (col 4) editable as before
   worksheet.eachRow((row) => {
     row.eachCell((cell, colNumber) => {
-      cell.protection = { locked: colNumber !== 4 };
+      cell.protection = { locked: showDifference ? true : colNumber !== 4 };
     });
   });
 
-  // structural protection: block column/row deletion, insertion, reordering, formatting
-  // this is what actually prevents the ID column from being tampered with
-  worksheet.protect(
-    process.env.STOCKTAKE_SHEET_PASSWORD || "systego-stocktake",
-    {
-      selectLockedCells: true,
-      selectUnlockedCells: true,
-      formatCells: false,
-      formatColumns: false,
-      formatRows: false,
-      insertRows: false,
-      insertColumns: false,
-      insertHyperlinks: false,
-      deleteRows: false,
-      deleteColumns: false,
-      sort: false,
-      autoFilter: false,
-      pivotTables: false,
-    }
-  );
+  worksheet.protect(process.env.STOCKTAKE_SHEET_PASSWORD || "systego-stocktake", {
+    selectLockedCells: true,
+    selectUnlockedCells: true,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertRows: false,
+    insertColumns: false,
+    insertHyperlinks: false,
+    deleteRows: false,
+    deleteColumns: false,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+  });
 
-  const filename = `stocktake-${stocktake.code}.xlsx`;
+  const filename = showDifference
+    ? `stocktake-${stocktake.code}-diff.xlsx`
+    : `stocktake-${stocktake.code}.xlsx`;
 
   res.setHeader(
     "Content-Type",
@@ -789,5 +801,134 @@ export const getStocktakes = async (req: Request, res: Response) => {
       limit: limitNum,
       pages: Math.ceil(total / limitNum),
     },
+  });
+};
+
+export const resolveStocktakeItems = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { itemId, action, note, referenceId } = req.body;
+
+  if (!itemId) {
+    throw new BadRequest("itemId is required");
+  }
+
+  const validActions = ["ignore", "adjust_stock", "send_to_wasted", "create_purchase"];
+  if (!validActions.includes(action)) {
+    throw new BadRequest(`action must be one of: ${validActions.join(", ")}`);
+  }
+
+  const stocktake = await StocktakeModel.findById(id);
+  if (!stocktake) throw new NotFound("Stocktake not found");
+  if (stocktake.status !== "completed") {
+    throw new BadRequest("Stocktake must be completed before resolving items");
+  }
+
+  const item = await StocktakeItemModel.findOne({
+    _id: itemId,
+    stocktakeId: id,
+    resolutionStatus: "pending",
+  });
+
+  if (!item) {
+    throw new NotFound("Pending item not found for the given itemId");
+  }
+
+  if (action === "ignore") {
+    await StocktakeItemModel.updateOne(
+      { _id: item._id },
+      {
+        $set: {
+          resolutionStatus: "resolved",
+          resolutionAction: "ignore",
+          resolvedAt: new Date(),
+          resolvedBy: req.user?.id,
+        },
+      }
+    );
+  }
+
+  if (action === "adjust_stock") {
+    // apply only the delta found during the count, not an absolute overwrite -
+    // live quantity may have changed (sales/purchases) since systemQty was snapshotted
+    await Product_WarehouseModel.findOneAndUpdate(
+      { productId: item.productId, productPriceId: item.productPriceId, warehouseId: item.warehouseId },
+      { $inc: { quantity: item.difference } }
+    );
+    await StocktakeItemModel.updateOne(
+      { _id: item._id },
+      {
+        $set: {
+          resolutionStatus: "resolved",
+          resolutionAction: "adjust_stock",
+          resolvedAt: new Date(),
+          resolvedBy: req.user?.id,
+        },
+      }
+    );
+  }
+
+  if (action === "send_to_wasted") {
+    if (item.resolutionType !== "shortage") {
+      throw new BadRequest("send_to_wasted is only valid for shortage items");
+    }
+
+    const wastedQty = Math.abs(item.difference!);
+
+    await WastedModel.create({
+      productId: item.productId,
+      productPriceId: item.productPriceId,
+      warehouseId: item.warehouseId,
+      quantity: wastedQty,
+      reason: "stocktake_not_found",
+      note: note || `From stocktake ${stocktake.code}`,
+      userId: req.user?.id,
+    });
+
+    // same fix - shift by the delta (a negative number for shortages), don't overwrite live stock
+    await Product_WarehouseModel.findOneAndUpdate(
+      { productId: item.productId, productPriceId: item.productPriceId, warehouseId: item.warehouseId },
+      { $inc: { quantity: item.difference } }
+    );
+
+    await StocktakeItemModel.updateOne(
+      { _id: item._id },
+      {
+        $set: {
+          resolutionStatus: "resolved",
+          resolutionAction: "send_to_wasted",
+          resolvedAt: new Date(),
+          resolvedBy: req.user?.id,
+        },
+      }
+    );
+  }
+
+  if (action === "create_purchase") {
+    if (item.resolutionType !== "surplus") {
+      throw new BadRequest("create_purchase is only valid for surplus items");
+    }
+    if (!referenceId) {
+      throw new BadRequest("referenceId (purchase id) is required for create_purchase");
+    }
+
+    await StocktakeItemModel.updateOne(
+      { _id: item._id },
+      {
+        $set: {
+          resolutionStatus: "resolved",
+          resolutionAction: "create_purchase",
+          resolutionReferenceId: referenceId,
+          resolvedAt: new Date(),
+          resolvedBy: req.user?.id,
+        },
+      }
+    );
+  }
+
+  const updatedItem = await StocktakeItemModel.findById(item._id).lean();
+
+  SuccessResponse(res, {
+    message: "Item resolved successfully",
+    item: updatedItem,
   });
 };

@@ -23,7 +23,6 @@ export const createPurchaseItemSchema = Joi.object({
   product_id: Joi.string().optional(),
   product_code: Joi.string().optional(),
   expiry_date: Joi.date().optional(),
-  quantity: Joi.number().required(),
   unit_cost: Joi.number().required(),
   discount: Joi.number().required(),
   tax: Joi.number().required(),

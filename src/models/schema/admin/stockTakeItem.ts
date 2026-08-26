@@ -48,6 +48,10 @@ const StocktakeItemSchema = new Schema(
       ref: "User",
       default: null,
     },
+    resolutionReferenceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null, // stores linked Purchase._id or Wasted._id depending on resolutionAction
+    },
   },
   { timestamps: true }
 );
@@ -58,4 +62,7 @@ StocktakeItemSchema.index(
   { unique: true }
 );
 
-export const StocktakeItemModel = mongoose.model("StocktakeItem", StocktakeItemSchema);
+export const StocktakeItemModel = mongoose.model(
+  "StocktakeItem",
+  StocktakeItemSchema
+);

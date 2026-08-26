@@ -13,6 +13,16 @@ const productPriceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+productPriceSchema.virtual("productpriceoptions", {
+  ref: "ProductPriceOption",          // The model to use
+  localField: "_id",                  // Field on ProductPrice
+  foreignField: "product_price_id"    // Field on ProductPriceOption
+});
+
+// Enable virtuals in JSON and object output
+productPriceSchema.set("toObject", { virtuals: true });
+productPriceSchema.set("toJSON", { virtuals: true });
+
 export const ProductPriceModel = mongoose.model("ProductPrice", productPriceSchema);
 
 const productPriceOptionSchema = new mongoose.Schema(
@@ -22,5 +32,15 @@ const productPriceOptionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productPriceOptionSchema.virtual("option", {
+  ref: "Option",
+  localField: "option_id",
+  foreignField: "_id",
+  justOne: true   // one option per product price option
+});
+
+productPriceOptionSchema.set("toObject", { virtuals: true });
+productPriceOptionSchema.set("toJSON", { virtuals: true });
 
 export const ProductPriceOptionModel = mongoose.model("ProductPriceOption", productPriceOptionSchema);

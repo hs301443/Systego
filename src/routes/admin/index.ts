@@ -77,6 +77,7 @@ import FawryRouter from "./Fawry";
 import orderTypeRouter from "./ordertype";
 import ProfileRouter from "./ProfileRoutes";
 import stockTakeRouter from "./stockTake";
+import wastedRouter from "./wasted";
 export const route = Router();
 
 route.use("/tenant-info", tenantInfoRouter)
@@ -158,5 +159,6 @@ route.use("/ledger", AccountingLedgerRouter)
 route.use("/fawry", FawryRouter)
 route.use("/order-type", orderTypeRouter);
 route.use("/stocktake", stockTakeRouter);
+route.use("/wasted", wastedRouter);
 
 export default route;
