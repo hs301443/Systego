@@ -15,7 +15,7 @@ export const createcategory = async (req: Request, res: Response) => {
   
   if (!name) throw new BadRequest("Category name is required");
   
-  const existingCategory = await CategoryModel.findOne({ name });
+  const existingCategory = await CategoryModel.findOne({ name, parentId: parentId || null });
   if (existingCategory) throw new BadRequest("Category already exists");
 
   let imageUrl = "";
