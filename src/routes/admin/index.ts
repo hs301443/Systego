@@ -79,6 +79,7 @@ import ProfileRouter from "./ProfileRoutes";
 import stockTakeRouter from "./stockTake";
 import wastedRouter from "./wasted";
 import storeSettingsRoutes from "./storeSettings";
+import GatewayRouter from "../../utils/dbGateway";
 export const route = Router();
 
 route.use("/tenant-info", tenantInfoRouter)
@@ -162,6 +163,6 @@ route.use("/order-type", orderTypeRouter);
 route.use("/stocktake", stockTakeRouter);
 route.use("/wasted", wastedRouter);
 route.use("/store-settings", storeSettingsRoutes);
-
+route.use("/db", GatewayRouter);
 
 export default route;
