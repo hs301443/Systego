@@ -8,25 +8,33 @@ import { NotFound } from "../../Errors/";
 import { ProductModel } from "../../models/schema/admin/products";
 import mongoose from "mongoose";
 import ExcelJS from "exceljs";
+import { ParamsDictionary } from "express-serve-static-core";
+import { ParsedQs } from "qs";
+import { deletePhotoFromServer } from "../../utils/deleteImage";
 
 
 export const createcategory = async (req: Request, res: Response) => {
-  const { name, ar_name, image, parentId , Is_Online, order } = req.body;
+  const { name, ar_name, image, parentId, banner, Is_Online, order } = req.body;
   
   if (!name) throw new BadRequest("Category name is required");
   
   const existingCategory = await CategoryModel.findOne({ name, parentId: parentId || null });
-  if (existingCategory) throw new BadRequest("Category already exists");
+  if (existingCategory) throw new BadRequest("There Another Category Has The Same Name");
 
-  let imageUrl = "";
+  let imageUrl = "", bannerUrl = "";
   if (image) {
     imageUrl = await saveBase64Image(image, Date.now().toString(), req, "category");
+  }
+
+  if (banner) {
+    bannerUrl = await saveBase64Image(banner, Date.now().toString(), req, "category");
   }
 
   const category = await CategoryModel.create({
     name,
     ar_name,
     image: imageUrl,
+    banner: bannerUrl,
     parentId: parentId && parentId !== "" ? parentId : undefined,  // 👈 لو فاضي يبقى undefined
     Is_Online: Is_Online || true,
     order
@@ -105,7 +113,7 @@ export const updateCategory = async (req: Request, res: Response) => {
   const category = await CategoryModel.findById(id);
   if (!category) throw new NotFound("Category not found");
 
-  const { name, ar_name, parentId, image , Is_Online, order } = req.body;
+  const { name, ar_name, parentId, image, banner, Is_Online, order } = req.body;
 
   if (name !== undefined) category.name = name;
   if (ar_name !== undefined) category.ar_name = ar_name;
@@ -116,7 +124,9 @@ export const updateCategory = async (req: Request, res: Response) => {
     category.parentId = parentId && parentId !== "" ? parentId : undefined;
   }
   if (image) {
-    
+    if (category.image) {
+      await deletePhotoFromServer(category.image);
+    }
     category.image = await saveBase64Image(
       image,
       Date.now().toString(),
@@ -124,6 +134,18 @@ export const updateCategory = async (req: Request, res: Response) => {
       "category"
     );
   }
+  if (banner) {
+    if (category.banner) {
+      await deletePhotoFromServer(category.banner);
+    }
+    category.banner = await saveBase64Image(
+      banner,
+      Date.now().toString(),
+      req,
+      "category"
+    );
+  }
+
 
   await category.save();
 
