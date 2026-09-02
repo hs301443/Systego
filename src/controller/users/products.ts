@@ -12,7 +12,7 @@ import { DiscountModel } from "../../models/schema/admin/Discount";
 const buildProductAggregationPipeline = (
   productMatchStage: object,
   wishlistIds: mongoose.Types.ObjectId[],
-  onlineWarehouseIds: mongoose.Types.ObjectId[],
+  onlineWarehouseIds: mongoose.Types.ObjectId[]
 ): mongoose.PipelineStage[] => {
   return [
     { $match: { ...productMatchStage, Is_Online: true } },
@@ -66,6 +66,7 @@ const buildProductAggregationPipeline = (
     { $unwind: { path: "$brandData", preserveNullAndEmptyArrays: true } },
 
     // Category — must be online too
+    // Category — must be online too, and a product can belong to multiple
     {
       $lookup: {
         from: "categories",
@@ -74,8 +75,19 @@ const buildProductAggregationPipeline = (
         as: "categoryData",
       },
     },
-    { $unwind: "$categoryData" },
-    { $match: { "categoryData.Is_Online": true } },
+    {
+      $addFields: {
+        categoryData: {
+          $filter: {
+            input: "$categoryData",
+            as: "c",
+            cond: { $eq: ["$$c.Is_Online", true] },
+          },
+        },
+      },
+    },
+    // Only keep products with at least one online category left
+    { $match: { "categoryData.0": { $exists: true } } },
 
     // 2️⃣ Discount
     {
@@ -102,17 +114,7 @@ const buildProductAggregationPipeline = (
               $and: [
                 { $gt: ["$discountData", null] },
                 { $eq: ["$discountData.status", true] },
-                {
-                  $or: [
-                    { $eq: ["$discountData.applyIn", "E-commerce"] },
-                    {
-                      $in: [
-                        "E-commerce",
-                        { $ifNull: ["$discountData.applyIn", []] },
-                      ],
-                    },
-                  ],
-                },
+                { $eq: ["$discountData.applyIn", "E-commerce"] },
               ],
             },
             then: "$discountData",
@@ -184,7 +186,10 @@ const buildProductAggregationPipeline = (
                   ],
                 },
                 else: {
-                  $max: [{ $subtract: ["$price", "$activeDiscount.amount"] }, 0],
+                  $max: [
+                    { $subtract: ["$price", "$activeDiscount.amount"] },
+                    0,
+                  ],
                 },
               },
             },
@@ -211,10 +216,12 @@ const buildProductAggregationPipeline = (
         // if out-of-stock products should be hidden instead.
         quantity: "$totalQuantity",
         is_favorite: { $in: ["$_id", wishlistIds] },
-        category: {
-          _id: "$categoryData._id",
-          name: "$categoryData.name",
-          ar_name: "$categoryData.ar_name",
+        categories: {
+          $map: {
+            input: "$categoryData",
+            as: "c",
+            in: { _id: "$$c._id", name: "$$c.name", ar_name: "$$c.ar_name" },
+          },
         },
 
         brand: {
@@ -280,7 +287,12 @@ const buildProductAggregationPipeline = (
                       },
                       else: {
                         $max: [
-                          { $subtract: ["$$price.price", "$activeDiscount.amount"] },
+                          {
+                            $subtract: [
+                              "$$price.price",
+                              "$activeDiscount.amount",
+                            ],
+                          },
                           0,
                         ],
                       },
@@ -352,7 +364,7 @@ export const getAllProducts = asyncHandler(
         .lean();
       if (user?.wishlist) {
         wishlistIds = user.wishlist.map(
-          (id) => new mongoose.Types.ObjectId(id.toString()),
+          (id) => new mongoose.Types.ObjectId(id.toString())
         );
       }
     }
@@ -363,7 +375,7 @@ export const getAllProducts = asyncHandler(
     const pipeline = buildProductAggregationPipeline(
       {},
       wishlistIds,
-      onlineWarehouseIds,
+      onlineWarehouseIds
     );
 
     pipeline.push({ $sort: { created_at: -1 } });
@@ -376,9 +388,9 @@ export const getAllProducts = asyncHandler(
         message: "All products retrieved successfully",
         data: productsWithStatus,
       },
-      200,
+      200
     );
-  },
+  }
 );
 
 // 🌟 Get Single Product By ID
@@ -402,7 +414,7 @@ export const getProductById = asyncHandler(
         .lean();
       if (user?.wishlist) {
         wishlistIds = user.wishlist.map(
-          (wId) => new mongoose.Types.ObjectId(wId.toString()),
+          (wId) => new mongoose.Types.ObjectId(wId.toString())
         );
       }
     }
@@ -410,7 +422,7 @@ export const getProductById = asyncHandler(
     const pipeline = buildProductAggregationPipeline(
       { _id: new mongoose.Types.ObjectId(id) },
       wishlistIds,
-      onlineWarehouseIds,
+      onlineWarehouseIds
     );
 
     const product = await ProductModel.aggregate(pipeline);
@@ -425,7 +437,7 @@ export const getProductById = asyncHandler(
         message: "Product retrieved successfully",
         data: product[0],
       },
-      200,
+      200
     );
-  },
+  }
 );
