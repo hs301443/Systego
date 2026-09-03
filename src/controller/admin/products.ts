@@ -65,12 +65,12 @@ export const createProduct = async (req: Request, res: Response) => {
   if (!hasVariations) {
     if (price === undefined || price === null) {
       throw new BadRequest(
-        "Product price is required when there are no variations"
+        "Product price is required when there are no variations",
       );
     }
     if (!code) {
       throw new BadRequest(
-        "Product code is required when there are no variations"
+        "Product code is required when there are no variations",
       );
     }
 
@@ -118,7 +118,7 @@ export const createProduct = async (req: Request, res: Response) => {
       image,
       Date.now().toString(),
       req,
-      "products"
+      "products",
     );
   }
 
@@ -130,7 +130,7 @@ export const createProduct = async (req: Request, res: Response) => {
           g,
           Date.now().toString(),
           req,
-          "products"
+          "products",
         );
         galleryUrls.push(imgUrl);
       }
@@ -139,7 +139,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
   if (show_quantity && !maximum_to_show) {
     throw new BadRequest(
-      "Maximum to show is required when show_quantity is true"
+      "Maximum to show is required when show_quantity is true",
     );
   }
 
@@ -219,7 +219,7 @@ export const createProduct = async (req: Request, res: Response) => {
               g,
               Date.now().toString(),
               req,
-              "product_gallery"
+              "product_gallery",
             );
             priceGalleryUrls.push(gUrl);
           }
@@ -292,7 +292,7 @@ export const createProduct = async (req: Request, res: Response) => {
 // ==================== جلب كل المنتجات ====================
 export const getProduct = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   const { warehouseId } = req.query;
 
@@ -300,7 +300,7 @@ export const getProduct = async (
   if (warehouseId) {
     const productIdsInWarehouse = await Product_WarehouseModel.distinct(
       "productId",
-      { warehouseId }
+      { warehouseId },
     );
     productFilter._id = { $in: productIdsInWarehouse };
   }
@@ -358,7 +358,7 @@ export const getProduct = async (
             if (!option?._id) continue;
 
             const variation = variations.find(
-              (v) => v._id.toString() === option.variationId?.toString()
+              (v) => v._id.toString() === option.variationId?.toString(),
             );
 
             if (variation) {
@@ -372,7 +372,7 @@ export const getProduct = async (
             (varName) => ({
               name: varName,
               options: groupedOptions[varName],
-            })
+            }),
           );
 
           return {
@@ -380,17 +380,18 @@ export const getProduct = async (
             quantity: variantQuantityMap[price._id.toString()] ?? 0,
             variations: variationsArray,
           };
-        })
+        }),
       );
 
       return {
         ...product,
-        quantity: prices.length === 0 ? simpleProductQuantity : product.quantity,
+        quantity:
+          prices.length === 0 ? simpleProductQuantity : product.quantity,
         totalQuantity,
         stocks,
         prices: formattedPrices,
       };
-    })
+    }),
   );
 
   SuccessResponse(res, { products: formattedProducts });
@@ -399,7 +400,7 @@ export const getProduct = async (
 // ==================== جلب منتج واحد ====================
 export const getOneProduct = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   const { id } = req.params;
 
@@ -453,7 +454,7 @@ export const getOneProduct = async (
         if (!option?._id) continue;
 
         const variation = variations.find(
-          (v) => v._id.toString() === option.variationId?.toString()
+          (v) => v._id.toString() === option.variationId?.toString(),
         );
 
         if (variation) {
@@ -476,7 +477,7 @@ export const getOneProduct = async (
         quantity: variantQuantityMap[price._id.toString()] ?? 0,
         variations: variationsArray,
       };
-    })
+    }),
   );
 
   SuccessResponse(res, {
@@ -534,6 +535,7 @@ export const updateProduct = async (req: Request, res: Response) => {
 
   const finalCode = code === "" ? undefined : code;
 
+  // فحص كود المنتج البسيط (Simple Product)
   if (!productHasVariations && finalCode && finalCode !== product.code) {
     const existingCode = await ProductModel.findOne({
       code: finalCode,
@@ -547,7 +549,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       image,
       Date.now().toString(),
       req,
-      "products"
+      "products",
     );
   }
 
@@ -559,7 +561,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           g,
           Date.now().toString(),
           req,
-          "product_gallery"
+          "product_gallery",
         );
         galleryUrls.push(gUrl);
       }
@@ -567,6 +569,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     product.gallery_product = galleryUrls;
   }
 
+  // تحديث بيانات المنتج الأساسية
   product.name = name ?? product.name;
   product.ar_name = ar_name ?? product.ar_name;
   product.categoryId = categoryId ?? product.categoryId;
@@ -574,10 +577,9 @@ export const updateProduct = async (req: Request, res: Response) => {
   product.product_unit = product_unit ?? product.product_unit;
   product.sale_unit = sale_unit ?? product.sale_unit;
   product.purchase_unit = purchase_unit ?? product.purchase_unit;
-  // NOTE: product.price for variation products is a derived/display value
-  // (min variant price) — see recalculation below. For simple products,
-  // price is editable directly.
-  product.price = productHasVariations ? product.price : price ?? product.price;
+  product.price = productHasVariations
+    ? product.price
+    : (price ?? product.price);
   product.description = description ?? product.description;
   product.ar_description = ar_description ?? product.ar_description;
   product.exp_ability = exp_ability ?? product.exp_ability;
@@ -586,11 +588,6 @@ export const updateProduct = async (req: Request, res: Response) => {
   product.low_stock = low_stock ?? product.low_stock;
   product.whole_price = whole_price ?? product.whole_price;
   product.start_quantaty = start_quantaty ?? product.start_quantaty;
-  // NOTE: cost is intentionally NOT overwritten here for the same reason
-  // as quantity — createPurchase already keeps cost in sync from real
-  // purchase unit_cost. Manual edits here would fight that. If you want
-  // cost to remain manually editable, keep the line below; otherwise
-  // remove it and let purchases be the source of truth for cost too.
   product.cost = cost ?? product.cost;
   product.taxesId = taxesId ?? product.taxesId;
   product.product_has_imei = product_has_imei ?? product.product_has_imei;
@@ -611,87 +608,120 @@ export const updateProduct = async (req: Request, res: Response) => {
 
   let minVariantPrice: number | null = null;
 
+  // ==================== معالجة الفاريشنز ====================
   if (prices && Array.isArray(prices)) {
+    // 1. ✅ جمع كل الـ IDs المبعوثة من الفرونت
+    const sentVariantIds = prices
+      .map((p) => p._id || (p as any).id)
+      .filter((id) => Boolean(id) && mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    // 2. ✅ حذف أي فاريشن وخياراته من الداتابيز لو الفرونت مسحه ومبعتوش
+    const variantsToDelete = await ProductPriceModel.find({
+      productId: id,
+      _id: { $nin: sentVariantIds },
+    }).select("_id");
+
+    if (variantsToDelete.length > 0) {
+      const deleteIds = variantsToDelete.map((v) => v._id);
+      // مسح الخيارات المرتبطة بها
+      await ProductPriceOptionModel.deleteMany({
+        product_price_id: { $in: deleteIds },
+      });
+      // مسح الفاريشن نفسه
+      await ProductPriceModel.deleteMany({
+        _id: { $in: deleteIds },
+      });
+    }
+
+    // 3. التحديث والإنشاء للعناصر المتبقية / الجديدة
     for (const p of prices) {
       let productPrice;
+      const variantId = p._id || (p as any).id;
       const priceCode = p.code === "" ? undefined : p.code;
 
+      // فحص عدم تكرار الكود مع أي فاريشن آخر
       if (priceCode) {
         const query: any = { code: priceCode };
-        if (p._id) {
-          query._id = { $ne: new mongoose.Types.ObjectId(p._id) };
+        if (variantId) {
+          query._id = { $ne: new mongoose.Types.ObjectId(variantId) };
+        } else {
+          query.productId = { $ne: id };
         }
+
         const existingPriceCode = await ProductPriceModel.findOne(query);
         if (existingPriceCode) {
           throw new BadRequest(
-            `Product price code '${priceCode}' already exists in another variation`
+            `Product price code '${priceCode}' already exists in another variation`,
           );
         }
       }
 
-      if (p._id) {
-        // ✅ quantity is intentionally excluded — only purchase, sale,
-        // transfer, and stock-adjustment endpoints may change it.
-        productPrice = await ProductPriceModel.findByIdAndUpdate(
-          p._id,
-          {
-            price: p.price,
-            code: priceCode,
-            cost: p.cost ?? undefined,
-          },
-          { new: true }
-        );
-      } else {
-        // ✅ New variant added via update: quantity always starts at 0,
-        // same rule as createProduct. No Product_Warehouse row is
-        // created here because we don't have a warehouseId in this
-        // endpoint's payload — the first purchase/adjustment into a
-        // warehouse will upsert it via createPurchase's atomic upsert.
-        let galleryUrls: string[] = [];
-        if (p.gallery && Array.isArray(p.gallery)) {
-          for (const g of p.gallery) {
-            if (typeof g === "string") {
-              const gUrl = await saveBase64Image(
-                g,
-                Date.now().toString(),
-                req,
-                "product_gallery"
-              );
-              galleryUrls.push(gUrl);
-            }
+      // معالجة الصور
+      let priceGalleryUrls: string[] | undefined;
+      if (p.gallery && Array.isArray(p.gallery)) {
+        priceGalleryUrls = [];
+        for (const g of p.gallery) {
+          if (typeof g === "string") {
+            const gUrl = await saveBase64Image(
+              g,
+              Date.now().toString(),
+              req,
+              "product_gallery",
+            );
+            priceGalleryUrls.push(gUrl);
           }
         }
+      }
+
+      // تعديل أو إنشاء
+      if (variantId) {
+        const updateData: any = {};
+        if (p.price !== undefined) updateData.price = p.price;
+        if (priceCode !== undefined) updateData.code = priceCode;
+        if (p.cost !== undefined) updateData.cost = p.cost;
+        if (priceGalleryUrls) updateData.gallery = priceGalleryUrls;
+
+        productPrice = await ProductPriceModel.findByIdAndUpdate(
+          variantId,
+          { $set: updateData },
+          { new: true },
+        );
+      } else {
         productPrice = await ProductPriceModel.create({
           productId: product._id,
           price: p.price,
           code: priceCode,
           quantity: 0,
           cost: p.cost || 0,
-          gallery: galleryUrls,
+          gallery: priceGalleryUrls || [],
         });
       }
 
+      // حساب أقل سعر
       if (productPrice) {
         if (minVariantPrice === null || productPrice.price < minVariantPrice) {
           minVariantPrice = productPrice.price;
         }
       }
 
-      if (productPrice && p.options && Array.isArray(p.options)) {
+      // تحديث الخيارات
+      if (productPrice && Array.isArray(p.options)) {
         await ProductPriceOptionModel.deleteMany({
           product_price_id: productPrice._id,
         });
-        for (const opt of p.options) {
-          await ProductPriceOptionModel.create({
+
+        if (p.options.length > 0) {
+          const optionDocs = p.options.map((optId: string) => ({
             product_price_id: productPrice._id,
-            option_id: opt,
-          });
+            option_id: optId,
+          }));
+          await ProductPriceOptionModel.insertMany(optionDocs);
         }
       }
     }
 
-    // ✅ Keep product.price (display/min price) in sync with variant
-    // prices after edits — mirrors the logic already used in createProduct.
+    // تحديث السعر المعروض للمنتج
     if (productHasVariations && minVariantPrice !== null) {
       await ProductModel.findByIdAndUpdate(id, {
         $set: { price: minVariantPrice },
@@ -783,11 +813,11 @@ export const getProductByCode = async (req: Request, res: Response) => {
     // ربط المخزون بكل منتج
     const productsWithStock = products.map((product) => {
       const productStocks = stocks.filter(
-        (s) => String(s.productId) === String(product._id)
+        (s) => String(s.productId) === String(product._id),
       );
       const totalQuantity = productStocks.reduce(
         (sum, s) => sum + s.quantity,
-        0
+        0,
       );
       return { ...product, totalQuantity, stocks: productStocks };
     });
@@ -833,7 +863,7 @@ export const getProductByCode = async (req: Request, res: Response) => {
       if (!option || !option._id) return;
 
       const variation = variations.find((v: any) =>
-        v.options.some((opt: any) => String(opt._id) === String(option._id))
+        v.options.some((opt: any) => String(opt._id) === String(option._id)),
       );
 
       if (variation) {
@@ -903,7 +933,7 @@ export const getProductByCode = async (req: Request, res: Response) => {
   // تجميع المخزون لكل منتج في المصفوفة
   const productsWithStock = products.map((product) => {
     const productStocks = stocks.filter(
-      (s) => String(s.productId) === String(product._id)
+      (s) => String(s.productId) === String(product._id),
     );
     const totalQuantity = productStocks.reduce((sum, s) => sum + s.quantity, 0);
     return { ...product, totalQuantity, stocks: productStocks };
@@ -919,7 +949,7 @@ export const getProductByCode = async (req: Request, res: Response) => {
 
 export const generateBarcodeImageController = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   const { product_price_id } = req.params;
   if (!product_price_id) throw new BadRequest("Product price ID is required");
@@ -982,7 +1012,7 @@ export const importProductsFromExcel = async (req: Request, res: Response) => {
   const workbook = new ExcelJS.Workbook();
   const arrayBuffer = req.file.buffer.buffer.slice(
     req.file.buffer.byteOffset,
-    req.file.buffer.byteOffset + req.file.buffer.byteLength
+    req.file.buffer.byteOffset + req.file.buffer.byteLength,
   ) as ArrayBuffer;
   await workbook.xlsx.load(arrayBuffer);
 
@@ -1196,13 +1226,13 @@ export const importProductsFromExcel = async (req: Request, res: Response) => {
   // Check existing products
   const existingProducts = await ProductModel.find(
     {},
-    { code: 1, name: 1 }
+    { code: 1, name: 1 },
   ).lean();
   const codeSet = new Set(
-    existingProducts.map((p: any) => p.code).filter(Boolean)
+    existingProducts.map((p: any) => p.code).filter(Boolean),
   );
   const nameSet = new Set(
-    existingProducts.map((p: any) => p.name.toLowerCase())
+    existingProducts.map((p: any) => p.name.toLowerCase()),
   );
 
   for (const prod of products) {

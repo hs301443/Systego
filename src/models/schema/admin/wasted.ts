@@ -1,7 +1,9 @@
+import { randomUUID } from "crypto";
 import mongoose from "mongoose";
 
 const wastedSchema = new mongoose.Schema(
   {
+    _id: { type: String, default: () => randomUUID() },
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
@@ -29,8 +31,12 @@ const wastedSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    isApproved: {
+      type: Boolean,
+      default: false
+    }
   },
-  { timestamps: true }
+  { timestamps: true, _id: false }
 );
 
 wastedSchema.index({ warehouseId: 1, createdAt: -1 });

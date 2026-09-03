@@ -18,6 +18,7 @@ export const createWasted = async (req: Request, res: Response) => {
       quantity,
       reason,
       note,
+      isApproved
     } = req.body;
     const jwtUser = req.user as any;
     const userId = jwtUser?.id || jwtUser?._id;
@@ -79,6 +80,7 @@ export const createWasted = async (req: Request, res: Response) => {
         reason,
         note,
         userId,
+        isApproved: isApproved !== undefined ? isApproved : false,
       });
     } catch (err) {
       // 4. Rollback stock decrement if the Wasted doc failed to save
@@ -254,5 +256,98 @@ export const getWastedStats = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("getWastedStats error:", error);
     throw new ForbiddenError(error.message || "Failed to get wasted stats");
+  }
+};
+
+export const updateWastedStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isApproved } = req.body;
+
+    const wasted = await WastedModel.findById(id);
+    if (!wasted) {
+      throw new BadRequest("Wasted entry not found");
+    }
+
+  
+    const targetQuantity = wasted.quantity;
+
+    if (targetQuantity <= 0) {
+      throw new BadRequest("Quantity must be greater than 0");
+    }
+
+    // 1. إذا كان الطلب يتضمن الموافقة ولم يكن معتمداً من قبل
+    if (isApproved === true && !wasted.isApproved) {
+      const { productId, productPriceId, warehouseId } = wasted;
+
+      // أ) التحقق والخصم الذري من مخزون المستودع للتأكد من توفر الكمية
+      const stockDoc = await Product_WarehouseModel.findOneAndUpdate(
+        {
+          productId,
+          ...(productPriceId ? { productPriceId } : {}),
+          warehouseId,
+          quantity: { $gte: targetQuantity },
+        },
+        { $inc: { quantity: -targetQuantity } },
+        { new: true }
+      );
+
+      if (!stockDoc) {
+        throw new BadRequest(
+          "Not enough stock in this warehouse to approve this wasted quantity"
+        );
+      }
+
+      // ب) خصم الكمية من المنتج الرئيسي
+      const product = await ProductModel.findOneAndUpdate(
+        { _id: productId, quantity: { $gte: targetQuantity } },
+        { $inc: { quantity: -targetQuantity } },
+        { new: true }
+      );
+
+      if (!product) {
+        // Rollback للمستودع في حال فشل الخصم من المنتج
+        await Product_WarehouseModel.findOneAndUpdate(
+          { productId, ...(productPriceId ? { productPriceId } : {}), warehouseId },
+          { $inc: { quantity: targetQuantity } }
+        );
+        throw new BadRequest("Product not found or insufficient total quantity");
+      }
+
+      // ج) الخصم من سعر المنتج إن وجد
+      if (productPriceId) {
+        const productPrice = await ProductPriceModel.findOneAndUpdate(
+          { _id: productPriceId, quantity: { $gte: targetQuantity } },
+          { $inc: { quantity: -targetQuantity } },
+          { new: true }
+        );
+
+        if (!productPrice) {
+          // Rollback للمستودع والمنتج
+          await Product_WarehouseModel.findOneAndUpdate(
+            { productId, productPriceId, warehouseId },
+            { $inc: { quantity: targetQuantity } }
+          );
+          await ProductModel.findOneAndUpdate(
+            { _id: productId },
+            { $inc: { quantity: targetQuantity } }
+          );
+          throw new BadRequest("Product price variant not found or insufficient quantity");
+        }
+      }
+
+      // د) تحديث السجل إلى معتمد
+      wasted.isApproved = true;
+    }
+
+      await wasted.save();
+
+    SuccessResponse(res, {
+      message: "Wasted entry updated successfully",
+      wasted,
+    });
+  } catch (error: any) {
+    console.error("updateWastedStatus error:", error);
+    throw new BadRequest(error.message || "Failed to update wasted entry");
   }
 };
