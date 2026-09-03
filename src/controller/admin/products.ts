@@ -385,7 +385,8 @@ export const getProduct = async (
 
       return {
         ...product,
-        quantity: prices.length === 0 ? simpleProductQuantity : product.quantity,
+        quantity:
+          prices.length === 0 ? simpleProductQuantity : product.quantity,
         totalQuantity,
         stocks,
         prices: formattedPrices,
@@ -715,14 +716,25 @@ export const deleteProduct = async (req: Request, res: Response) => {
 
   // Delete stocks and update warehouses
   const stocks = await Product_WarehouseModel.find({ productId: id });
+
+  const warehouseUpdates = new Map<string, number>();
   for (const stock of stocks) {
-    await WarehouseModel.findByIdAndUpdate(stock.warehouseId, {
+    const warehouseId = stock.warehouseId.toString();
+    warehouseUpdates.set(
+      warehouseId,
+      (warehouseUpdates.get(warehouseId) || 0) + stock.quantity
+    );
+  }
+
+  for (const [warehouseId, totalQuantity] of warehouseUpdates) {
+    await WarehouseModel.findByIdAndUpdate(warehouseId, {
       $inc: {
+        stock_Quantity: -totalQuantity,
         number_of_products: -1,
-        stock_Quantity: -stock.quantity,
       },
     });
   }
+
   await Product_WarehouseModel.deleteMany({ productId: id });
 
   // Delete prices and options
@@ -741,7 +753,6 @@ export const deleteProduct = async (req: Request, res: Response) => {
   }
 
   await ProductModel.findByIdAndDelete(id);
-
   SuccessResponse(res, {
     message: "Product and all related data deleted successfully",
   });

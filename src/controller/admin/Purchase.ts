@@ -115,13 +115,21 @@ export const getPurchaseById = async (req: Request, res: Response) => {
       path: "items",
       populate: [
         { path: "product_id" },
-        { path: "product_price_id" },
         { path: "material_id" },
         { path: "category_id" },
         { path: "warehouse_id" },
         {
           path: "options",
-          populate: [{ path: "option_id" }, { path: "product_price_id" }],
+          populate: {
+            path: "product_price_id",
+            populate: {
+              path: "productpriceoptions",
+              populate: {
+                path: "option",
+                populate: { path: "variation" },
+              },
+            },
+          },
         },
       ],
     })
@@ -131,7 +139,24 @@ export const getPurchaseById = async (req: Request, res: Response) => {
 
   if (!purchase) throw new NotFound("Purchase not found");
 
-  SuccessResponse(res, { purchase });
+  const purchaseObj: any = purchase.toObject();
+
+  purchaseObj.items = purchaseObj.items.map((item: any) => {
+    item.options = item.options.map((opt: any) => {
+      const productPrice = opt.product_price_id;
+      if (productPrice?.productpriceoptions?.length) {
+        productPrice.variation_name = productPrice.productpriceoptions
+          .map((ppo: any) => ppo.option?.name)
+          .filter(Boolean)
+          .join(" - "); // "sm - Red"
+      }
+      delete productPrice.productpriceoptions;
+      return opt;
+    });
+    return item;
+  });
+
+  SuccessResponse(res, { purchase: purchaseObj });
 };
 
 export const getLowStockProducts = async (req: Request, res: Response) => {
