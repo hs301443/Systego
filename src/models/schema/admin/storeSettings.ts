@@ -1,29 +1,21 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose from 'mongoose';
 
-export interface IStoreSettings extends Document {
-    title: string;
-    logo: string | null;
-}
+const appSettingSchema = new mongoose.Schema({
+  key: { type: String, default: 'main', unique: true },
+  templateSlug: { type: String, required: true },
+  templateSectionsSnapshot: [{ type: String }],
 
-const storeSettingsSchema = new Schema<IStoreSettings>(
-    {
-        title: {
-            type: String,
-            required: true,
-            trim: true,
-        },
+  storeName: { type: String, required: true },
+  logoUrl: { type: String },
+  fontStyle: { type: String, default: 'default' },
+  colors: { type: Map, of: String, default: {} },
+  
+  sections: [{
+    key: { type: String, required: true },
+    enabled: { type: Boolean, default: true },
+    templateSlug: { type: String, default: "default" },
+    _id: false,
+  }],
+}, { timestamps: true });
 
-        logo: {
-            type: String,
-            default: null,
-        },
-    },
-    {
-        timestamps: true,
-    }
-);
-
-export const StoreSettingsModel = mongoose.model<IStoreSettings>(
-    "StoreSettings",
-    storeSettingsSchema
-);
+export const appSettingModel = mongoose.model('AppSetting', appSettingSchema);

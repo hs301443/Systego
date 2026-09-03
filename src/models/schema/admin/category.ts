@@ -5,6 +5,7 @@ const categorySchema = new Schema(
     name: { type: String, required: true },
     ar_name: { type: String, required: true },
     image: { type: String },
+    banner: { type: String },
     parentId: { type: Schema.Types.ObjectId, ref: "Category" },
     product_quantity: { type: Number, default: 0 },
     Is_Online: { type: Boolean, default: true },

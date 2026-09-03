@@ -16,8 +16,8 @@ const setOnlineStatus = async (warehouseId: string) => {
 export const createWarehouse = async (req: Request, res: Response) => {
     const { name, address, phone, email, Is_Online } = req.body;
 
-    if (!name || !address || !phone || !email) {
-        throw new BadRequest("Name, address, phone, and email are required");
+    if (!name || !address || !phone) {
+        throw new BadRequest("Name, address, phone are required");
     }
     
     const existingWarehouse = await WarehouseModel.findOne({ name });
