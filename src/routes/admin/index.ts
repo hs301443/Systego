@@ -81,6 +81,7 @@ import wastedRouter from "./wasted";
 import POSWastedRouter from "./POS/wastedRoutes";
 import storeSettingsRoutes from "./storeSettings";
 import GatewayRouter from "../../utils/dbGateway";
+import POSOnlineOrdersRouter from "./POS/onlineOrders";
 export const route = Router();
 
 route.use("/tenant-info", tenantInfoRouter);
@@ -166,5 +167,6 @@ route.use("/wasted", wastedRouter);
 route.use("/pos-wasted", POSWastedRouter);
 route.use("/store-settings", storeSettingsRoutes);
 route.use("/db", GatewayRouter);
+route.use("/pos-online-orders", POSOnlineOrdersRouter);
 
 export default route;
