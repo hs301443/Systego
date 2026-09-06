@@ -17,6 +17,9 @@ import axios from "axios";
 export interface TenantFeatures {
     haveEcommerce: boolean;
     haveMobileApp: boolean;
+    havePOS: boolean;
+    haveReports: boolean;
+    haveStockTake: boolean;
 }
 
 export interface TenantInfo {
